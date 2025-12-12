@@ -1,0 +1,15 @@
+# this is the "requirements.txt" file...
+
+#testing
+pytest
+
+# stocks:
+pandas
+python-dotenv
+plotly
+
+#web app
+flask
+
+#production server
+gunicorn
