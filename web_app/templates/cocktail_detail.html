@@ -1,0 +1,33 @@
+{% extends "bootstrap_5_layout.html" %}
+{% set active_page = "home" %}
+
+{% block content %}
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h1 class="text-center mb-4">{{ cocktail.name }}</h1>
+
+            {% if cocktail.thumb %}
+            <div class="text-center mb-4">
+                <img src="{{ cocktail.thumb }}" class="img-fluid rounded" alt="{{ cocktail.name }}" style="max-width: 300px;">
+            </div>
+            {% endif %}
+
+            <h3>Ingredients:</h3>
+            <ul class="list-group mb-4">
+                {% for ingredient in cocktail.ingredients %}
+                <li class="list-group-item">{{ ingredient }}</li>
+                {% endfor %}
+            </ul>
+
+            <h3>Instructions:</h3>
+            <p class="mb-4">{{ cocktail.instructions }}</p>
+
+            <div class="text-center">
+                <a href="{{ url_for('home_routes.recommendations') }}" class="btn btn-primary">Back to Recommendations</a>
+                <a href="{{ url_for('home_routes.index') }}" class="btn btn-secondary">New Search</a>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
