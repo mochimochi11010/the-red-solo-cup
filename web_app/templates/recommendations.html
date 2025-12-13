@@ -1,0 +1,30 @@
+{% extends "bootstrap_5_layout.html" %}
+{% set active_page = "home" %}
+
+{% block content %}
+
+    <h1 class="text-center mb-4">Cocktail Recommendations</h1>
+
+    <div class="row">
+        {% for cocktail in cocktails %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                {% if cocktail.thumb %}
+                <a href="/cocktail/{{ cocktail.id }}">
+                    <img src="{{ cocktail.thumb }}" class="card-img-top" alt="{{ cocktail.name }}" style="height: 200px; object-fit: cover;">
+                </a>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ cocktail.name }}</h5>
+                    <a href="/cocktail/{{ cocktail.id }}" class="btn btn-danger">View Recipe</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="/" class="btn btn-secondary">Search Again</a>
+    </div>
+
+{% endblock %}

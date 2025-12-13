@@ -10,7 +10,7 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
 
-    <title>Hello, world! | this is the title text</title>
+    <title>Red Solo Cup - Cocktail Recommendations</title>
 </head>
 <body>
 
@@ -43,45 +43,13 @@
         ... the link href and text are used to construct the link, and
         ... the page identifier is used to determine active page styling if it matches the `active_page` value set on each page
     -->
-    {% set nav_links = [
-        ('/about', 'about', 'About'),
-        ('/hello', 'hello', 'Hello'),
-        ('/rps/form', 'rps_form', 'RPS Game'),
-        ('/stocks/form', 'stocks_form', 'Stocks'),
-    ] -%}
-    {% set active_page = active_page|default('home') -%}
     <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
         <div class="container-fluid">
-            <!--a class="navbar-brand" href="/">My Web App</a-->
             <a class="navbar-brand" href="/">
-                <!--
-                    ICONS
-                    https://icons.getbootstrap.com/
-                -->
-                <i class="bi bi-bag-heart-fill" style="font-size: 1.7rem; color: white;"></i>
+                <i class="bi bi-cup-straw" style="font-size: 1.5rem;"></i>
                 &nbsp;
-                My Web App
+                Red Solo Cup
             </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                {% for href, page_id, link_text in nav_links %}
-                    {% if page_id == active_page %}
-                        {% set is_active = "active" -%}
-                    {% else %}
-                        {% set is_active = "" -%}
-                    {% endif %}
-
-                    <li class="nav-item">
-                        <a class="nav-link {{ is_active }}" href="{{href}}">{{link_text}}</a>
-                    </li>
-                {% endfor %}
-                </ul>
-            </div>
         </div>
     </nav>
 

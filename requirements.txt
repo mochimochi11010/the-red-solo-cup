@@ -10,6 +10,7 @@ plotly
 
 #web app
 flask
+requests
 
 #production server
 gunicorn

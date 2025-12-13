@@ -3,24 +3,272 @@
 
 {% block content %}
 
-    <h1>Welcome Home</h1>
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h1 class="text-center mb-4">Welcome to the Red Solo Cup</h1>
+            <p class="text-center">Enter the alcohols and mixers you have, and we'll recommend cocktails you can make!</p>
 
-    <p>This is a paragraph on the "home" page.</p>
-
-    <!-- SEE: https://getbootstrap.com/docs/5.2/components/carousel/ -->
-    <div id="carouselExampleSlidesOnly" class="carousel slide" data-bs-ride="carousel">
-        <div class="carousel-inner">
-            <div class="carousel-item active">
-                <img src="https://image.shutterstock.com/image-photo/business-development-success-growing-growth-600w-748617433.jpg" class="d-block w-100" alt="...">
+            <!-- Instructions -->
+            <div class="alert alert-info" style="font-size: 0.9em;">
+                <strong>How it works:</strong>
+                <ul class="mb-1">
+                    <li><span style="color: #007bff; font-weight: bold;">★ Blue = Popular ingredients</span></li>
+                    <li><span style="color: #28a745; font-weight: bold;">✓ Green = Compatible with your selected alcohols</span> (moved to top)</li>
+                    <li>Click dropdown items to toggle selection, or type directly in text fields</li>
+                    <li>Selections sync between dropdowns and text inputs</li>
+                    <li>Remove items by clicking them again or editing the text fields</li>
+                </ul>
             </div>
 
-            <div class="carousel-item">
-                <img src="https://image.shutterstock.com/image-photo/double-exposure-hands-making-notes-600w-1577042437.jpg" class="d-block w-100" alt="...">
-            </div>
+            <form action="/recommendations" method="post" class="border p-4 rounded shadow-sm">
+                <div class="mb-3">
+                    <label class="form-label">Choose from available ingredients for alcohols:</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <select class="form-select" id="alcoholSelect" multiple size="10">
+                                <!-- Common alcohols first -->
+                                {% for ing in common_alcohols %}
+                                <option value="{{ ing }}" style="font-weight: bold; color: #007bff;">★ {{ ing }}</option>
+                                {% endfor %}
+                                <option disabled>─────────────</option>
+                                {% for ing in ingredients %}
+                                {% if ing not in common_alcohols %}
+                                <option value="{{ ing }}">{{ ing }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <small class="text-muted">Scroll through all available ingredient options and hold Ctrl/Cmd to select multiple alcohols. Or enter your own below:</small>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="carousel-item">
-                <img src="https://image.shutterstock.com/image-photo/business-documents-on-office-table-600w-414153883.jpg" class="d-block w-100" alt="...">
-            </div>
+                <div class="mb-3">
+                    <label for="alcohols" class="form-label">Alcohols (comma-separated, or use selection above):</label>
+                    <input type="text" class="form-control" id="alcohols" name="alcohols" placeholder="e.g., vodka, rum, tequila" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Choose from available ingredients for mixers:</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <select class="form-select" id="mixerSelect" multiple size="10">
+                                <!-- Common mixers first -->
+                                {% for ing in common_mixers %}
+                                <option value="{{ ing }}" style="font-weight: bold; color: #007bff;">★ {{ ing }}</option>
+                                {% endfor %}
+                                <option disabled>─────────────</option>
+                                {% for ing in ingredients %}
+                                {% if ing not in common_mixers %}
+                                <option value="{{ ing }}">{{ ing }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <small class="text-muted">Scroll through all available ingredient options and hold Ctrl/Cmd to select multiple mixers. Or enter your own below:</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="mixers" class="form-label">Mixers (comma-separated, optional):</label>
+                    <input type="text" class="form-control" id="mixers" name="mixers" placeholder="e.g., coke, sprite, orange juice">
+                </div>
+
+                <div class="text-center">
+                    <button type="submit" class="btn btn-danger btn-lg">Find Cocktails!</button>
+                </div>
+            </form>
+
+            <style>
+                /* Style for multi-select dropdowns */
+                select[multiple] {
+                    background-color: white;
+                }
+            </style>
+
+            <script>
+                // Function to update compatible mixers highlighting
+                async function updateCompatibleMixers() {
+                    const selectedAlcohols = Array.from(document.getElementById('alcoholSelect').selectedOptions)
+                        .filter(opt => opt.value && !opt.disabled)
+                        .map(opt => opt.value.replace('★ ', ''));
+
+                    if (selectedAlcohols.length === 0) {
+                        resetMixerHighlighting();
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/compatible_mixers?alcohols=${encodeURIComponent(selectedAlcohols.join(','))}`);
+                        const data = await response.json();
+
+                        // Reset all styling
+                        resetMixerHighlighting();
+
+                        // Highlight compatible mixers and move to top
+                        data.mixers.forEach(mixer => {
+                            const options = document.querySelectorAll('#mixerSelect option');
+                            options.forEach(opt => {
+                                if (opt.value && opt.value.replace(/^[*✓ ]*/, '').toLowerCase() === mixer.toLowerCase()) {
+                                    opt.style.fontWeight = 'bold';
+                                    opt.style.color = '#28a745'; // Green for compatible
+                                    opt.textContent = '✓ ' + opt.textContent.replace(/^[*✓ ]*/, '');
+                                    // Move to very top
+                                    opt.parentNode.insertBefore(opt, opt.parentNode.firstChild);
+                                }
+                            });
+                        });
+                    } catch (error) {
+                        console.error('Error fetching compatible mixers:', error);
+                    }
+                }
+
+                function resetMixerHighlighting() {
+                    const options = document.querySelectorAll('#mixerSelect option');
+                    options.forEach(opt => {
+                        if (!opt.disabled) {
+                            opt.style.fontWeight = 'normal';
+                            opt.style.color = '';
+                            if (opt.textContent.startsWith('✓ ')) {
+                                opt.textContent = opt.textContent.substring(2);
+                            }
+                            if (opt.textContent.startsWith('★ ')) {
+                                opt.style.fontWeight = 'bold';
+                                opt.style.color = '#007bff';
+                            }
+                        }
+                    });
+                }
+
+                function updateSelectHighlighting(selectId) {
+                    const select = document.getElementById(selectId);
+                    const options = select.options;
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].selected && !options[i].disabled) {
+                            options[i].style.backgroundColor = '#fd7e14'; // Orange
+                            options[i].style.color = 'white';
+                        } else {
+                            options[i].style.backgroundColor = '';
+                            options[i].style.color = '';
+                            // Reset specific colors
+                            if (options[i].textContent.startsWith('★ ')) {
+                                options[i].style.color = '#007bff';
+                                options[i].style.fontWeight = 'bold';
+                            } else if (options[i].textContent.startsWith('✓ ')) {
+                                options[i].style.color = '#28a745';
+                                options[i].style.fontWeight = 'bold';
+                            } else if (!options[i].disabled) {
+                                options[i].style.color = '';
+                                options[i].style.fontWeight = '';
+                            }
+                        }
+                    }
+                }
+
+                function updateInputFromSelect(selectId) {
+                    const select = document.getElementById(selectId);
+                    const selected = Array.from(select.selectedOptions)
+                        .filter(opt => opt.value && !opt.disabled)
+                        .map(opt => opt.value.replace('★ ', ''));
+                    const inputId = selectId === 'alcoholSelect' ? 'alcohols' : 'mixers';
+                    document.getElementById(inputId).value = selected.join(', ');
+                }
+
+                function updateSelectFromInput(inputId) {
+                    const input = document.getElementById(inputId);
+                    const inputText = input.value.trim();
+                    const selectId = inputId === 'alcohols' ? 'alcoholSelect' : 'mixerSelect';
+                    const select = document.getElementById(selectId);
+
+                    // Parse comma-separated values
+                    const inputValues = inputText ? inputText.split(',').map(v => v.trim().toLowerCase()) : [];
+
+                    // Reset all options
+                    Array.from(select.options).forEach(opt => {
+                        if (!opt.disabled) opt.selected = false;
+                    });
+
+                    // Set selected based on input text
+                    inputValues.forEach(value => {
+                        Array.from(select.options).forEach(opt => {
+                            if (opt.value && !opt.disabled) {
+                                const optValue = opt.value.replace('★ ', '').toLowerCase();
+                                if (optValue === value) {
+                                    opt.selected = true;
+                                }
+                            }
+                        });
+                    });
+
+                    // Update visual highlighting
+                    updateSelectHighlighting(selectId);
+                }
+
+                // Custom mousedown handler for toggle selection
+                function handleSelectMousedown(event, selectId) {
+                    const option = event.target;
+                    if (option.tagName === 'OPTION' && !option.disabled) {
+                        // Prevent default browser behavior
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        // Simply toggle this option's selection without affecting others
+                        option.selected = !option.selected;
+
+                        // Update UI immediately
+                        updateSelectHighlighting(selectId);
+                        updateInputFromSelect(selectId);
+                        if (selectId === 'alcoholSelect') {
+                            updateCompatibleMixers();
+                        }
+                    }
+                }
+
+                // Add mousedown handlers for dropdowns (intercept before browser selection)
+                document.getElementById('alcoholSelect').addEventListener('mousedown', function(e) {
+                    handleSelectMousedown(e, 'alcoholSelect');
+                });
+
+                document.getElementById('mixerSelect').addEventListener('mousedown', function(e) {
+                    handleSelectMousedown(e, 'mixerSelect');
+                });
+
+                // Add input handlers for text fields
+                document.getElementById('alcohols').addEventListener('input', function() {
+                    updateSelectFromInput('alcohols');
+                    // Trigger compatibility update after updating alcohol selection
+                    setTimeout(() => updateCompatibleMixers(), 10);
+                });
+
+                document.getElementById('mixers').addEventListener('input', function() {
+                    updateSelectFromInput('mixers');
+                });
+
+                // Change event handlers for keyboard and ctrl+click updates
+                document.getElementById('alcoholSelect').addEventListener('change', function() {
+                    updateSelectHighlighting('alcoholSelect');
+                    updateInputFromSelect('alcoholSelect');
+                    updateCompatibleMixers();
+                });
+
+                document.getElementById('mixerSelect').addEventListener('change', function() {
+                    updateSelectHighlighting('mixerSelect');
+                    updateInputFromSelect('mixerSelect');
+                });
+
+                // Initialize highlighting on page load
+                document.addEventListener('DOMContentLoaded', function() {
+                    updateSelectHighlighting('alcoholSelect');
+                    updateSelectHighlighting('mixerSelect');
+                    updateCompatibleMixers();
+                    // Ensure text inputs are populated
+                    updateInputFromSelect('alcoholSelect');
+                    updateInputFromSelect('mixerSelect');
+                });
+            </script>
         </div>
     </div>
 
