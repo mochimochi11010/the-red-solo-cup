@@ -7,7 +7,7 @@ import os
 # Add the parent directory to the Python path so we can import app modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol
+from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol, search_youtube_tutorial
 
 home_routes = Blueprint("home_routes", __name__)
 
@@ -97,7 +97,10 @@ def cocktail_detail(drink_id):
         "detail": detail
     }
 
-    return render_template("cocktail_detail.html", cocktail=cocktail)
+    # Fetch YouTube tutorial video
+    youtube_video = search_youtube_tutorial(detail["strDrink"])
+
+    return render_template("cocktail_detail.html", cocktail=cocktail, youtube_video=youtube_video)
 
 @home_routes.route("/compatible_mixers")
 def compatible_mixers():

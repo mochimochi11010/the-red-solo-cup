@@ -23,6 +23,58 @@
             <h3>Instructions:</h3>
             <p class="mb-4">{{ cocktail.instructions }}</p>
 
+            {% if youtube_video %}
+            <h3>Video Tutorial:</h3>
+            <div class="mb-4">
+                {% if youtube_video.video_id %}
+                <!-- Embedded YouTube video -->
+                <div class="ratio ratio-16x9">
+                    <iframe 
+                        src="https://www.youtube.com/embed/{{ youtube_video.video_id }}?rel=0" 
+                        title="{{ youtube_video.video_title }}" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                        allowfullscreen>
+                    </iframe>
+                </div>
+                <p class="text-muted mt-2"><small><strong>{{ youtube_video.video_title }}</strong></small></p>
+                {% elif youtube_video.api_key_missing %}
+                <!-- Message when API key is not configured -->
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> YouTube API Key Required</h5>
+                    <p class="mb-2">To display video tutorials directly on this page, you need to configure a YouTube Data API key.</p>
+                    <hr>
+                    <p class="mb-2"><strong>Quick Setup:</strong></p>
+                    <ol class="mb-2">
+                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                        <li>Create a project and enable "YouTube Data API v3"</li>
+                        <li>Create an API key in Credentials</li>
+                        <li>Add <code>YOUTUBE_API_KEY=your-key-here</code> to your .env file</li>
+                        <li>Restart the Flask server</li>
+                    </ol>
+                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}" 
+                       target="_blank" 
+                       class="btn btn-danger btn-sm">
+                        <i class="bi bi-youtube"></i> View on YouTube Instead
+                    </a>
+                </div>
+                {% else %}
+                <!-- Fallback when video couldn't be found -->
+                <div class="alert alert-info">
+                    <p class="mb-2">
+                        <i class="bi bi-info-circle"></i> 
+                        Couldn't find a specific video tutorial. You can search on YouTube:
+                    </p>
+                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}" 
+                       target="_blank" 
+                       class="btn btn-danger btn-sm">
+                        <i class="bi bi-youtube"></i> Search "{{ youtube_video.search_query }}" on YouTube
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <div class="text-center">
                 <a href="{{ url_for('home_routes.recommendations') }}" class="btn btn-primary">Back to Recommendations</a>
                 <a href="{{ url_for('home_routes.index') }}" class="btn btn-secondary">New Search</a>

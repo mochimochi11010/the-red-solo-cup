@@ -1,4 +1,5 @@
 import requests
+import os
 
 BASE_URL = "https://www.thecocktaildb.com/api/json/v1/1"
 
@@ -161,3 +162,75 @@ def estimate_bac_for_drink(detail, avg_weight_lbs, alcohol_keywords):
     r = 0.7  # for simplicity, assume male; could be 0.73 for male, 0.66 for female
     bac = standard_drinks * 5.14 / (avg_weight_lbs * r)
     return bac
+
+def search_youtube_tutorial(cocktail_name):
+    """
+    Search for a YouTube tutorial video for the given cocktail.
+
+    Args:
+        cocktail_name (str): The name of the cocktail to search for
+
+    Returns:
+        dict: Dictionary with video_id for embedding, or None if API key not configured
+
+    Note:
+        Requires YOUTUBE_API_KEY environment variable to be set.
+        Returns a specific video ID that can be embedded directly on the page.
+    """
+    search_query = f"how to make {cocktail_name} cocktail recipe"
+    api_key = os.environ.get("YOUTUBE_API_KEY")
+    
+    if not api_key:
+        print(f"Warning: No YOUTUBE_API_KEY found. Cannot fetch videos for {cocktail_name}")
+        return {
+            "video_id": None,
+            "video_title": None,
+            "search_query": search_query,
+            "api_key_missing": True
+        }
+    
+    try:
+        # Search for videos using YouTube Data API
+        search_url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "part": "snippet",
+            "q": search_query,
+            "type": "video",
+            "maxResults": 3,  # Get top 3 results
+            "videoDuration": "short",  # Prefer shorter tutorials
+            "relevanceLanguage": "en",
+            "key": api_key
+        }
+        
+        response = requests.get(search_url, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get("items", [])
+            
+            if items:
+                # Use the first video
+                video = items[0]
+                video_id = video["id"]["videoId"]
+                video_title = video["snippet"]["title"]
+                video_description = video["snippet"]["description"]
+                
+                return {
+                    "video_id": video_id,
+                    "video_title": video_title,
+                    "video_description": video_description,
+                    "search_query": search_query,
+                    "api_key_missing": False
+                }
+        else:
+            print(f"YouTube API returned status {response.status_code} for {cocktail_name}")
+            
+    except Exception as e:
+        print(f"Error searching YouTube for {cocktail_name}: {e}")
+    
+    # Return None if we couldn't get a video
+    return {
+        "video_id": None,
+        "video_title": None,
+        "search_query": search_query,
+        "api_key_missing": False
+    }
