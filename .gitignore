@@ -1,13 +1,8 @@
 # this is the ".gitignore" file
 
-# we can mention the names of other files in the repo
-# that we would like to IGNORE from being tracked in version control
-
-
 # clutter files
 __pycache__
 .pytest_cache
 # hidden file on mac:
 .DS_Store
 .env
-# secret credentials
