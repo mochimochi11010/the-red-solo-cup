@@ -1,27 +1,8 @@
-"""
-Cocktail API module for The Red Solo Cup web application.
-
-This module contains functions for interacting with The Cocktail DB API
-to fetch cocktail recipes and perform ingredient matching.
-"""
-
 import requests
 
 BASE_URL = "https://www.thecocktaildb.com/api/json/v1/1"
 
 def fetch_drinks_by_alcohol(alcohol):
-    """
-    Fetch a list of drinks from The Cocktail DB that contain the given alcohol type.
-
-    Args:
-        alcohol (str): The type of alcohol to search for (e.g., "vodka", "rum")
-
-    Returns:
-        list: List of drink dictionaries from the API, or empty list if error
-
-    Note:
-        This function makes an external API call and includes error handling.
-    """
     try:
         response = requests.get(f"{BASE_URL}/filter.php", params={"i": alcohol})
         if response.status_code != 200:
@@ -45,12 +26,6 @@ def fetch_drink_details(drink_id):
         return None
 
 def fetch_ingredient_list():
-    """
-    Fetch the list of all available ingredients from The Cocktail DB API.
-
-    Returns:
-        list: List of ingredient names as strings, or empty list if error
-    """
     try:
         response = requests.get(f"{BASE_URL}/list.php", params={"i": "list"})
         if response.status_code != 200:
@@ -136,19 +111,6 @@ def parse_volume_to_ounces(measure_text):
     return total
 
 def recommend_cocktails(user_prefs, max_results=5):
-    """
-    Recommend cocktails based on user's available alcohols and mixers.
-
-    Args:
-        user_prefs (dict): Dictionary with "alcohol_types" list and "mixers" list
-        max_results (int): Maximum number of recommendations to return (default: 5)
-
-    Returns:
-        list: List of recommended cocktail dictionaries with name, id, ingredients, etc.
-
-    Note:
-        This is the main function that orchestrates the recommendation process.
-    """
     alcohols = user_prefs["alcohol_types"]
     mixers = user_prefs["mixers"]
     seen = set()
