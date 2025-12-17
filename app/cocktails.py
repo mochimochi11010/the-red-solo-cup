@@ -177,9 +177,9 @@ def parse_volume_to_ounces(measure_text):
     # Convert different units to ounces (for space-separated cases)
     if "cup" in text or "cups" in text:
         return total * 8.0  # 1 cup = 8 fluid ounces
-    if "ml" in text and not any("ml" in tok for tok in tokens if tok != tokens[0]):  # Avoid double conversion
+    if "ml" in text and any(tok == "ml" for tok in tokens):  # Only convert if "ml" is a separate token
         return total * 0.0338
-    if "cl" in text and not any("cl" in tok for tok in tokens if tok != tokens[0]):  # Avoid double conversion
+    if "cl" in text and any(tok == "cl" for tok in tokens):  # Only convert if "cl" is a separate token
         return total * 0.338
 
     return total
