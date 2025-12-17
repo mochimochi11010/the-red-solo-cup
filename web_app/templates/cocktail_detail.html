@@ -75,6 +75,72 @@
             </div>
             {% endif %}
 
+            {% if standardized_ingredients %}
+            <h3>Red Solo Cup Preparation (16 oz):</h3>
+            <p class="mb-4">Standardized measurements for easy pouring into a 16 oz red solo cup:</p>
+
+            <div class="row">
+                <div class="col-md-8">
+                    <h5 class="text-center mb-3">Red Solo Cup Pouring Guide (16 oz)</h5>
+                    <div class="d-flex justify-content-center align-items-start">
+                        <!-- Rectangle Cup Visualization with Lines -->
+                        <div class="me-4" style="position: relative;">
+                            <svg width="250" height="320" viewBox="0 0 250 320">
+                                <!-- Rectangle representing the 16 oz cup (empty/white) -->
+                                <rect x="30" y="30" width="190" height="260" fill="#ffffff" stroke="#e74c3c" stroke-width="4" rx="8"/>
+
+                                <!-- Measurement lines: 1 line per ingredient (1:1 ratio) -->
+                                {% set num_lines = standardized_ingredients|length %}
+                                {% set line_spacing = 260 / (num_lines + 1) %} <!-- Space lines evenly -->
+
+                                {% for i in range(num_lines) %}
+                                {% set ing = standardized_ingredients[i][0] %}
+                                {% set vol_oz = standardized_ingredients[i][1] %}
+                                {% set pct = standardized_ingredients[i][2] %}
+                                {% set line_y = 30 + (i + 1) * line_spacing %}
+
+                                <!-- Horizontal measurement line -->
+                                <line x1="20" y1="{{ line_y }}" x2="220" y2="{{ line_y }}" stroke="{{ ingredient_colors[ing] }}" stroke-width="3" opacity="0.8"/>
+
+                                <!-- Ingredient name and measurement underneath the line -->
+                                <!-- Ingredient name underneath the line -->
+                                <text x="125" y="{{ line_y + 15 }}" font-family="Arial" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">{{ ing }}</text>
+
+                                <!-- Measurement underneath the name -->
+                                <text x="125" y="{{ line_y + 30 }}" font-family="Arial" font-size="11" fill="#000000" text-anchor="middle">{{ format_measurement(ing, vol_oz, ingredient_measures.get(ing, ""), "visualization") }}</text>
+                                {% endfor %}
+                            </svg>
+                        </div>
+
+
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <h5>Ingredient Breakdown:</h5>
+                    <div class="list-group">
+                        {% for ing, vol_oz, pct in standardized_ingredients %}
+                        {% set original_measure = ingredient_measures.get(ing, "") %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <div style="width: 12px; height: 12px; border-radius: 2px; margin-right: 8px; background-color: {{ ingredient_colors[ing] }};"></div>
+                                <span>{{ ing }}</span>
+                            </div>
+                            <div class="text-end">
+                                <div class="fw-bold" style="text-decoration: underline;">{{ format_measurement(ing, vol_oz, original_measure, "breakdown") }}</div>
+                                <small class="text-muted">{{ get_percentage_display(ing, pct) }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3 p-3 bg-light rounded">
+                        <strong>Total Volume: 16.0 oz</strong>
+                        <br><small class="text-muted">Standard red solo cup size</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="text-center">
                 <a href="{{ url_for('home_routes.recommendations') }}" class="btn btn-primary">Back to Recommendations</a>
                 <a href="{{ url_for('home_routes.index') }}" class="btn btn-secondary">New Search</a>

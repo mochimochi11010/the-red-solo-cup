@@ -163,6 +163,45 @@ def estimate_bac_for_drink(detail, avg_weight_lbs, alcohol_keywords):
     bac = standard_drinks * 5.14 / (avg_weight_lbs * r)
     return bac
 
+def generate_unique_color(ingredient_name):
+    """
+    Generate a unique, highly distinct color for an ingredient based on its name.
+    Uses a predefined palette of 15 maximally contrasting colors for optimal visual distinction.
+
+    Args:
+        ingredient_name (str): The name of the ingredient
+
+    Returns:
+        str: Hex color code from a highly distinct palette
+    """
+    # Predefined palette of 15 maximally contrasting colors
+    # These colors were chosen for maximum visual distinction across the color spectrum
+    distinct_colors = [
+        "#FF0000",  # Bright Red
+        "#00FF00",  # Bright Green
+        "#0000FF",  # Bright Blue
+        "#FFFF00",  # Bright Yellow
+        "#FF00FF",  # Magenta
+        "#00FFFF",  # Cyan
+        "#FF8000",  # Orange
+        "#8000FF",  # Purple
+        "#FF0080",  # Pink
+        "#80FF00",  # Lime Green
+        "#0080FF",  # Sky Blue
+        "#FF8080",  # Light Red
+        "#80FF80",  # Light Green
+        "#8080FF",  # Light Blue
+        "#FFFF80",  # Light Yellow
+    ]
+
+    # Create a hash from the ingredient name for consistency
+    hash_value = hash(ingredient_name.lower().strip())
+
+    # Use the hash to select from our distinct color palette
+    color_index = hash_value % len(distinct_colors)
+
+    return distinct_colors[color_index]
+
 def search_youtube_tutorial(cocktail_name):
     """
     Search for a YouTube tutorial video for the given cocktail.
@@ -179,7 +218,7 @@ def search_youtube_tutorial(cocktail_name):
     """
     search_query = f"how to make {cocktail_name} cocktail recipe"
     api_key = os.environ.get("YOUTUBE_API_KEY")
-    
+
     if not api_key:
         print(f"Warning: No YOUTUBE_API_KEY found. Cannot fetch videos for {cocktail_name}")
         return {
@@ -188,7 +227,7 @@ def search_youtube_tutorial(cocktail_name):
             "search_query": search_query,
             "api_key_missing": True
         }
-    
+
     try:
         # Search for videos using YouTube Data API
         search_url = "https://www.googleapis.com/youtube/v3/search"
@@ -201,19 +240,19 @@ def search_youtube_tutorial(cocktail_name):
             "relevanceLanguage": "en",
             "key": api_key
         }
-        
+
         response = requests.get(search_url, params=params, timeout=5)
         if response.status_code == 200:
             data = response.json()
             items = data.get("items", [])
-            
+
             if items:
                 # Use the first video
                 video = items[0]
                 video_id = video["id"]["videoId"]
                 video_title = video["snippet"]["title"]
                 video_description = video["snippet"]["description"]
-                
+
                 return {
                     "video_id": video_id,
                     "video_title": video_title,
@@ -223,10 +262,10 @@ def search_youtube_tutorial(cocktail_name):
                 }
         else:
             print(f"YouTube API returned status {response.status_code} for {cocktail_name}")
-            
+
     except Exception as e:
         print(f"Error searching YouTube for {cocktail_name}: {e}")
-    
+
     # Return None if we couldn't get a video
     return {
         "video_id": None,
@@ -234,3 +273,95 @@ def search_youtube_tutorial(cocktail_name):
         "search_query": search_query,
         "api_key_missing": False
     }
+
+def standardize_ingredients_to_cup(detail, cup_size_oz=16.0):
+    """
+    Standardize cocktail ingredients to fit a red solo cup of specified size.
+
+    Args:
+        detail (dict): Cocktail detail from API
+        cup_size_oz (float): Size of the red solo cup in ounces (default 16.0)
+
+    Returns:
+        list: List of tuples (ingredient_name, standardized_ounces, percentage)
+    """
+    ingredients_volumes = []
+    total_volume = 0.0
+
+    # Parse all ingredients and their volumes
+    for n in range(1, 16):
+        ing = detail.get(f"strIngredient{n}")
+        measure = detail.get(f"strMeasure{n}")
+        if ing and ing.strip():
+            volume_oz = parse_volume_to_ounces(measure or "")
+            if volume_oz > 0:
+                ingredients_volumes.append((ing.strip(), volume_oz))
+                total_volume += volume_oz
+
+    # If no volumes found, return empty list
+    if total_volume == 0:
+        return []
+
+    # Scale to fit the cup size
+    scale_factor = cup_size_oz / total_volume
+
+    standardized = []
+    cumulative_pct = 0.0
+    for ing, vol_oz in ingredients_volumes:
+        standardized_vol = vol_oz * scale_factor
+        percentage = (standardized_vol / cup_size_oz) * 100
+        standardized.append((ing, standardized_vol, percentage))
+        cumulative_pct += percentage
+
+    # Adjust last ingredient to ensure total is exactly 100%
+    if standardized:
+        standardized[-1] = (standardized[-1][0], standardized[-1][1], 100.0 - (cumulative_pct - percentage))
+
+    return standardized
+
+def display_red_solo_cup_visualization(standardized_ingredients, cup_size_oz=16.0):
+    """
+    Display a simple ASCII visualization of the red solo cup with ingredient bars.
+
+    Args:
+        standardized_ingredients (list): List from standardize_ingredients_to_cup
+        cup_size_oz (float): Size of the red solo cup in ounces
+    """
+    print("\nRed Solo Cup Visualization (16 oz):")
+    print("   _________ ")
+    print("  /         \\")
+    print(" /           \\")
+
+    # Cup has 10 lines of content
+    cup_lines = 10
+    current_level = 0.0
+    ingredient_bars = []
+
+    for i, (ing, vol_oz, pct) in enumerate(standardized_ingredients):
+        # Calculate how many lines this ingredient takes
+        lines_for_ing = int((pct / 100.0) * cup_lines)
+        if lines_for_ing < 1 and pct > 0:
+            lines_for_ing = 1  # At least one line for any ingredient
+
+        for line in range(lines_for_ing):
+            if current_level < cup_lines:
+                print(" |###########|")
+                current_level += 1
+
+        # Collect the ingredient bar
+        bar_length = int(pct / 10)  # Scale to 10 characters
+        bar = "#" * bar_length + " " * (10 - bar_length)
+        ingredient_bars.append(f"     [{bar}] {ing} ({vol_oz:.1f} oz, {pct:.1f}%)")
+
+    # Fill remaining cup with empty space
+    while current_level < cup_lines:
+        print(" |           |")
+        current_level += 1
+
+    print(" \\___________/")
+    print(f"Total volume: {cup_size_oz:.1f} oz")
+
+    # Print all ingredient bars
+    print("\nIngredient Breakdown:")
+    for bar in ingredient_bars:
+        print(bar)
