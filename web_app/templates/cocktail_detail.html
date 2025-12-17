@@ -27,19 +27,17 @@
             <h3>Video Tutorial:</h3>
             <div class="mb-4">
                 {% if youtube_video.video_id %}
-                <!-- Embedded YouTube video -->
                 <div class="ratio ratio-16x9">
-                    <iframe 
-                        src="https://www.youtube.com/embed/{{ youtube_video.video_id }}?rel=0" 
-                        title="{{ youtube_video.video_title }}" 
-                        frameborder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    <iframe
+                        src="https://www.youtube.com/embed/{{ youtube_video.video_id }}?rel=0"
+                        title="{{ youtube_video.video_title }}"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         allowfullscreen>
                     </iframe>
                 </div>
                 <p class="text-muted mt-2"><small><strong>{{ youtube_video.video_title }}</strong></small></p>
                 {% elif youtube_video.api_key_missing %}
-                <!-- Message when API key is not configured -->
                 <div class="alert alert-warning">
                     <h5 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> YouTube API Key Required</h5>
                     <p class="mb-2">To display video tutorials directly on this page, you need to configure a YouTube Data API key.</p>
@@ -52,21 +50,20 @@
                         <li>Add <code>YOUTUBE_API_KEY=your-key-here</code> to your .env file</li>
                         <li>Restart the Flask server</li>
                     </ol>
-                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}" 
-                       target="_blank" 
+                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}"
+                       target="_blank"
                        class="btn btn-danger btn-sm">
                         <i class="bi bi-youtube"></i> View on YouTube Instead
                     </a>
                 </div>
                 {% else %}
-                <!-- Fallback when video couldn't be found -->
                 <div class="alert alert-info">
                     <p class="mb-2">
-                        <i class="bi bi-info-circle"></i> 
+                        <i class="bi bi-info-circle"></i>
                         Couldn't find a specific video tutorial. You can search on YouTube:
                     </p>
-                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}" 
-                       target="_blank" 
+                    <a href="https://www.youtube.com/results?search_query={{ youtube_video.search_query | urlencode }}"
+                       target="_blank"
                        class="btn btn-danger btn-sm">
                         <i class="bi bi-youtube"></i> Search "{{ youtube_video.search_query }}" on YouTube
                     </a>
@@ -82,44 +79,93 @@
             <div class="row">
                 <div class="col-md-8">
                     <h5 class="text-center mb-3">Red Solo Cup Pouring Guide (16 oz)</h5>
-                    <div class="d-flex justify-content-center align-items-start">
-                        <!-- Rectangle Cup Visualization with Lines -->
-                        <div class="me-4" style="position: relative;">
+
+                    {% if non_measurable_ingredients %}
+                    <div class="text-center mb-1">
+                        <div class="alert alert-info py-1" style="font-size: 0.8em;">
+                            <strong>Also add to cup:</strong>
+                            {% for ing, measure in non_measurable_ingredients %}
+                            <span class="badge bg-secondary me-1" style="font-size: 0.7em;">{{ measure }} {{ ing }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-center">
+                        <div style="position: relative;">
+                            <div id="hover-info" class="position-absolute" style="left: 260px; top: 0; width: 200px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.5rem; display: none; z-index: 10;"></div>
                             <svg width="250" height="320" viewBox="0 0 250 320">
-                                <!-- Rectangle representing the 16 oz cup (empty/white) -->
-                                <rect x="30" y="30" width="190" height="260" fill="#ffffff" stroke="#e74c3c" stroke-width="4" rx="8"/>
+                                <path d="M40,30 Q125,25 210,30 L185,290 Q125,295 65,290 Z" fill="none" stroke="#e74c3c" stroke-width="4"/>
 
-                                <!-- Measurement lines: 1 line per ingredient (1:1 ratio) -->
-                                {% set num_lines = standardized_ingredients|length %}
-                                {% set line_spacing = 260 / (num_lines + 1) %} <!-- Space lines evenly -->
+                                <!-- Filled sections for each measurable ingredient -->
+                                {% set ns = namespace(cumulative_height=0) %}
+                                {% for ing, vol_oz, pct in standardized_ingredients %}
+                                {% set height = (pct / 100) * 260 %}
+                                {% set y_start = 290 - ns.cumulative_height - height %}
+                                {% set y_end = 290 - ns.cumulative_height %}
 
-                                {% for i in range(num_lines) %}
-                                {% set ing = standardized_ingredients[i][0] %}
-                                {% set vol_oz = standardized_ingredients[i][1] %}
-                                {% set pct = standardized_ingredients[i][2] %}
-                                {% set line_y = 30 + (i + 1) * line_spacing %}
+                                <!-- Calculate curved coordinates to match cup shape -->
+                                {% set total_height = 260 %}
+                                {% set top_y = 30 %}
+                                {% set bottom_y = 290 %}
 
-                                <!-- Horizontal measurement line -->
-                                <line x1="20" y1="{{ line_y }}" x2="220" y2="{{ line_y }}" stroke="{{ ingredient_colors[ing] }}" stroke-width="3" opacity="0.8"/>
+                                {% set top_relative = (y_start - top_y) / total_height %}
+                                {% set bottom_relative = (y_end - top_y) / total_height %}
 
-                                <!-- Ingredient name and measurement underneath the line -->
-                                <!-- Ingredient name underneath the line -->
-                                <text x="125" y="{{ line_y + 15 }}" font-family="Arial" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">{{ ing }}</text>
+                                {% set top_left = 40 + top_relative * 25 %}
+                                {% set top_right = 210 - top_relative * 25 %}
+                                {% set bottom_left = 40 + bottom_relative * 25 %}
+                                {% set bottom_right = 210 - bottom_relative * 25 %}
 
-                                <!-- Measurement underneath the name -->
-                                <text x="125" y="{{ line_y + 30 }}" font-family="Arial" font-size="11" fill="#000000" text-anchor="middle">{{ format_measurement(ing, vol_oz, ingredient_measures.get(ing, ""), "visualization") }}</text>
+                                <!-- Calculate curve control points -->
+                                {% set top_curve_y = 25 + top_relative * (295 - 25) %}
+                                {% set bottom_curve_y = 25 + bottom_relative * (295 - 25) %}
+
+                                <path d="M{{ top_left }},{{ y_start }} Q125,{{ top_curve_y }} {{ top_right }},{{ y_start }} L{{ bottom_right }},{{ y_end }} Q125,{{ bottom_curve_y }} {{ bottom_left }},{{ y_end }} Z"
+                                      fill="{{ ingredient_colors[ing] }}"
+                                      stroke="none"
+                                      data-ingredient="{{ ing }}"
+                                      data-percentage="{{ "%.1f"|format(pct) }}"
+                                      data-measure="{{ ingredient_measures.get(ing, "") }}"
+                                      onmouseover="showHoverInfo(this)"
+                                      onmouseout="hideHoverInfo()">
+                                </path>
+                                <!-- Add text label if section is large enough (pct > 15%) -->
+                                {% if pct > 15 %}
+                                <text x="125" y="{{ y_start + height/2 + 5 }}" font-family="Arial" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">{{ ing }}</text>
+                                {% endif %}
+                                {% set ns.cumulative_height = ns.cumulative_height + height %}
                                 {% endfor %}
                             </svg>
                         </div>
-
-
                     </div>
+
+                    <script>
+                        function showHoverInfo(element) {
+                            const infoDiv = document.getElementById('hover-info');
+                            const name = element.getAttribute('data-ingredient');
+                            const pct = element.getAttribute('data-percentage');
+                            const measure = element.getAttribute('data-measure');
+                            infoDiv.innerHTML = `<strong>${name}</strong><br>${pct}%<br>${measure}`;
+
+                            // Position the info box next to the hovered element
+                            const rect = element.getBoundingClientRect();
+                            const svg = element.ownerSVGElement;
+                            const svgRect = svg.getBoundingClientRect();
+                            const relativeTop = rect.top - svgRect.top;
+                            infoDiv.style.top = relativeTop + 'px';
+                            infoDiv.style.display = 'block';
+                        }
+                        function hideHoverInfo() {
+                            document.getElementById('hover-info').style.display = 'none';
+                        }
+                    </script>
                 </div>
 
                 <div class="col-md-4">
                     <h5>Ingredient Breakdown:</h5>
                     <div class="list-group">
-                        {% for ing, vol_oz, pct in standardized_ingredients %}
+                        {% for ing, vol_oz, pct in standardized_ingredients | reverse %}
                         {% set original_measure = ingredient_measures.get(ing, "") %}
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div class="d-flex align-items-center">

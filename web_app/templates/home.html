@@ -12,6 +12,7 @@
             <div class="alert alert-info" style="font-size: 0.9em;">
                 <strong>How it works:</strong>
                 <ul class="mb-1">
+                    <li><strong>Tip:</strong> Select 2-3 alcohols for the most tailored and reliable cocktail recommendations</li>
                     <li><span style="color: #007bff; font-weight: bold;">★ Blue = Popular ingredients</span></li>
                     <li><span style="color: #28a745; font-weight: bold;">✓ Green = Compatible with your selected alcohols</span> (moved to top)</li>
                     <li>Click dropdown items to toggle selection, or type directly in text fields</li>
@@ -21,6 +22,10 @@
             </div>
 
             <form action="/recommendations" method="post" class="border p-4 rounded shadow-sm">
+                <div class="alert alert-warning mb-3" style="font-size: 0.9em;">
+                    <strong>⚠️ IMPORTANT:</strong> Select <strong>no more than 3 alcohols</strong> to avoid slow performance and API rate limits (our cocktail database is free and has usage limits). Please also wait a few seconds after selecting your alcohol to see our curated ingredient list recommendations appear in green! ⚠️
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label">Choose from available ingredients for alcohols:</label>
                     <div class="row">

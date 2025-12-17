@@ -7,28 +7,7 @@ import os
 # Add the parent directory to the Python path so we can import app modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol, search_youtube_tutorial, standardize_ingredients_to_cup, generate_unique_color
-
-def is_solid_ingredient(ingredient_name):
-    """Determine if an ingredient is typically solid/powder vs liquid."""
-    solid_keywords = [
-        'sugar', 'salt', 'brown sugar', 'powdered sugar', 'caster sugar',
-        'granulated sugar', 'icing sugar', 'confectioners sugar',
-        'superfine sugar', 'demerara sugar', 'muscovado sugar',
-        'syrup', 'honey', 'extract', 'bitters', 'cream', 'milk',
-        'mint', 'fruit', 'lemon', 'lime', 'cherry',
-        'olive', 'onion', 'celery', 'cucumber', 'ginger', 'pepper',
-        'powder'
-    ]
-
-    ingredient_lower = ingredient_name.lower().strip()
-
-    # Check if ingredient contains solid keywords
-    for keyword in solid_keywords:
-        if keyword in ingredient_lower:
-            return True
-
-    return False
+from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol, search_youtube_tutorial, standardize_ingredients_to_cup, generate_unique_color, parse_volume_to_ounces, is_solid_ingredient
 
 def format_measurement(ingredient_name, vol_oz, original_measure=None, context="visualization"):
     """Format measurements based on context.
@@ -80,15 +59,6 @@ def format_measurement(ingredient_name, vol_oz, original_measure=None, context="
                 return f"{fraction:.2f} of a cup"
 
 def get_percentage_display(ingredient_name, pct):
-    """Get percentage display for ingredient breakdown.
-
-    Args:
-        ingredient_name: Name of the ingredient
-        pct: Percentage value
-
-    Returns:
-        "0%" for solid ingredients, formatted percentage for liquids
-    """
     if is_solid_ingredient(ingredient_name):
         return "0%"
     else:
@@ -164,8 +134,8 @@ def recommendations():
 def cocktail_detail(drink_id):
     detail = fetch_drink_details(drink_id)
     if not detail:
-        flash("Cocktail not found.", "danger")
-        return redirect(url_for("home_routes.index"))
+        flash(f"Sorry, we couldn't load the details for this cocktail (ID: {drink_id}). It may have been removed or there might be a temporary API issue. Please try another cocktail.", "warning")
+        return redirect(url_for("home_routes.recommendations"))
 
     ingredients = []
     for n in range(1, 16):
@@ -185,26 +155,66 @@ def cocktail_detail(drink_id):
     # Fetch YouTube tutorial video
     youtube_video = search_youtube_tutorial(detail["strDrink"])
 
-    # Standardize ingredients for 16 oz red solo cup
+    # Collect all ingredients with their measures first
+    all_ingredients = []
+    for n in range(1, 16):
+        ing = detail.get(f"strIngredient{n}")
+        measure = detail.get(f"strMeasure{n}")
+        if ing and ing.strip():
+            all_ingredients.append((ing.strip(), measure or ""))
+
+    # Track which ingredients had original measures vs inferred
+    original_measurable = set()
+    for ing, measure in all_ingredients:
+        if parse_volume_to_ounces(measure or "") > 0:
+            original_measurable.add(ing)
+
+    # Standardize ingredients for 16 oz red solo cup (this may infer missing amounts)
     standardized_ingredients = standardize_ingredients_to_cup(detail, cup_size_oz=16.0)
 
-    # Generate unique colors for each ingredient
+    # Sort by percentage descending (largest at bottom)
+    standardized_ingredients = sorted(standardized_ingredients, key=lambda x: x[2], reverse=True)
+
+    # Separate measurable and non-measurable ingredients
+    # Include originally measurable ingredients OR ingredients that were inferred amounts
+    all_measurable_names = original_measurable | {ing for ing, _, _ in standardized_ingredients}
+    non_measurable_ingredients = []
+    for ing, measure in all_ingredients:
+        if ing not in all_measurable_names or is_solid_ingredient(ing):
+            non_measurable_ingredients.append((ing, measure))
+
+    # Generate unique colors for all ingredients (both measurable and non-measurable)
+    # Ensure no color duplicates within each cocktail
     ingredient_colors = {}
-    for ing, _, _ in standardized_ingredients:
-        ingredient_colors[ing] = generate_unique_color(ing)
 
-    # Create ingredient_measures mapping
+    # Special color for ice
+    ice_color = "#87CEEB"  # Light blue for ice
+
+    # Available colors (excluding ice color)
+    available_colors = [
+        "#DC143C", "#FF4500", "#32CD32", "#00CED1", "#1E90FF",
+        "#9370DB", "#FF69B4", "#8B4513", "#20B2AA", "#FF6347",
+        "#4682B4", "#CD5C5C", "#40E0D0", "#800080", "#008000",
+        "#FFA500", "#FF0000", "#0000FF", "#FFD700", "#228B22",
+        "#FF00FF", "#00FFFF", "#800000", "#808000", "#008080",
+        "#000080", "#696969", "#8B0000", "#8A2BE2", "#FF1493"
+    ]
+
+    color_index = 0
+    for ing, _ in all_ingredients:
+        if ing.lower() == "ice":
+            ingredient_colors[ing] = ice_color
+        else:
+            # Assign next available color
+            ingredient_colors[ing] = available_colors[color_index % len(available_colors)]
+            color_index += 1
+
+    # Create ingredient_measures mapping for all ingredients
     ingredient_measures = {}
-    for ing, _, _ in standardized_ingredients:
-        # Find the original measurement for this ingredient
-        for n in range(1, 16):
-            orig_ing = detail.get(f"strIngredient{n}")
-            orig_measure = detail.get(f"strMeasure{n}")
-            if orig_ing and orig_ing.strip() == ing:
-                ingredient_measures[ing] = orig_measure or ""
-                break
+    for ing, measure in all_ingredients:
+        ingredient_measures[ing] = measure
 
-    return render_template("cocktail_detail.html", cocktail=cocktail, youtube_video=youtube_video, standardized_ingredients=standardized_ingredients, ingredient_colors=ingredient_colors, ingredient_measures=ingredient_measures, format_measurement=format_measurement, get_percentage_display=get_percentage_display)
+    return render_template("cocktail_detail.html", cocktail=cocktail, youtube_video=youtube_video, standardized_ingredients=standardized_ingredients, ingredient_colors=ingredient_colors, ingredient_measures=ingredient_measures, non_measurable_ingredients=non_measurable_ingredients, format_measurement=format_measurement, get_percentage_display=get_percentage_display)
 
 @home_routes.route("/compatible_mixers")
 def compatible_mixers():
@@ -213,31 +223,62 @@ def compatible_mixers():
         return {'mixers': []}
 
     from flask import jsonify
+    import time
     alcohols = [a.strip().lower() for a in alcohols_param.split(',') if a.strip()]
 
     # Find all mixers that appear in recipes with these alcohols
     compatible_mixers = set()
     seen_cocktails = set()
+    rate_limited_count = 0
+    total_api_calls = 0
+    max_calls_per_alcohol = max(1, 20 // len(alcohols))  # Distribute 20 calls across alcohols
 
     for alcohol in alcohols:
         drinks = fetch_drinks_by_alcohol(alcohol)
-        for drink in drinks:
+        # Limit calls per alcohol based on total alcohols selected
+        drink_subset = drinks[:max_calls_per_alcohol]
+
+        for drink in drink_subset:
             if isinstance(drink, dict) and 'idDrink' in drink:
                 drink_id = drink['idDrink']
                 if drink_id not in seen_cocktails:
                     seen_cocktails.add(drink_id)
+                    total_api_calls += 1
+
+                    # Stop if we've made too many calls total
+                    if total_api_calls > 25:
+                        break
+
                     detail = fetch_drink_details(drink_id)
                     if detail:
                         for i in range(1, 16):
                             ing = detail.get(f'strIngredient{i}')
                             if ing and ing.strip():
                                 ing_lower = ing.lower().strip()
-                                # Add as mixer if not in alcohols list
-                                if ing_lower not in alcohols:
+                                # Add as mixer if not in alcohols list and not another alcohol
+                                common_alcohols = {'vodka', 'gin', 'rum', 'whiskey', 'tequila', 'bourbon', 'scotch', 'wine', 'beer', 'champagne', 'cognac', 'brandy', 'vermouth'}
+                                if ing_lower not in alcohols and ing_lower not in common_alcohols:
                                     compatible_mixers.add(ing.lower().strip())
+                    else:
+                        # If detail fetch failed (likely rate limited), count it
+                        rate_limited_count += 1
 
+                    # Small delay to be more API-friendly
+                    time.sleep(0.2)
+
+        # Stop if we've exceeded total call limit
+        if total_api_calls > 25:
+            break
+
+    # Always return some results even if rate limited
     sorted_mixers = sorted(compatible_mixers)
-    return jsonify({'mixers': sorted_mixers})
+
+    # Add warning if we hit limits
+    response = {'mixers': sorted_mixers}
+    if rate_limited_count > 0 or total_api_calls >= 25:
+        response['warning'] = 'Results limited due to API constraints. More alcohols = more potential mixers!'
+
+    return jsonify(response)
 
 @home_routes.route("/about")
 def about():

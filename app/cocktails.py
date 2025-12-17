@@ -16,14 +16,27 @@ def fetch_drinks_by_alcohol(alcohol):
 
 def fetch_drink_details(drink_id):
     try:
-        response = requests.get(f"{BASE_URL}/lookup.php", params={"i": drink_id})
+        response = requests.get(f"{BASE_URL}/lookup.php", params={"i": drink_id}, timeout=10)
+        if response.status_code == 429:
+            print(f"Rate limited (429) for drink_id {drink_id}")
+            return None
         if response.status_code != 200:
+            print(f"API returned status {response.status_code} for drink_id {drink_id}")
             return None
         data = response.json()
         drinks = data.get("drinks")
-        return drinks[0] if drinks else None
+        if not drinks:
+            print(f"No drink details found for drink_id {drink_id}")
+            return None
+        return drinks[0]
+    except requests.exceptions.Timeout:
+        print(f"Timeout fetching details for drink_id {drink_id}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Network error fetching details for drink_id {drink_id}: {e}")
+        return None
     except Exception as e:
-        print(f"Error fetching details for drink_id {drink_id}: {e}")
+        print(f"Unexpected error fetching details for drink_id {drink_id}: {e}")
         return None
 
 def fetch_ingredient_list():
@@ -44,11 +57,14 @@ def fetch_ingredient_list():
         return []
 
 def drink_matches_mixers(drink, mixers):
+    # Get all ingredients from the drink recipe
     ingredients = []
     for n in range(1, 16):
         ing = drink.get(f"strIngredient{n}")
         if ing and ing.strip():
             ingredients.append(ing.strip().lower())
+
+    # If no mixers specified, any drink matches
     if not mixers:
         return True
 
@@ -65,32 +81,48 @@ def drink_matches_mixers(drink, mixers):
         "tonic": ["tonic water", "tonic"],
     }
 
-    # Enhanced matching: check exact match and fuzzy match (substring)
+    # Check if any user mixer matches any recipe ingredient
     for recipe_ing in ingredients:
         for user_mixer in mixers:
-            um_lower = user_mixer.lower().strip()
-            # Direct aliases
-            if (um_lower in aliases.get(recipe_ing, []) or 
-                recipe_ing in aliases.get(um_lower, [])):
+            user_mixer_clean = user_mixer.lower().strip()
+
+            # Check aliases first
+            if (user_mixer_clean in aliases.get(recipe_ing, []) or
+                recipe_ing in aliases.get(user_mixer_clean, [])):
                 return True
-            # Substring match
-            if um_lower in recipe_ing or recipe_ing in um_lower:
+
+            # Check if one contains the other
+            if user_mixer_clean in recipe_ing or recipe_ing in user_mixer_clean:
                 return True
-            # Also check for word overlaps
-            um_words = set(um_lower.split())
-            ri_words = set(recipe_ing.split())
-            if um_words.intersection(ri_words):
+
+            # Check for word overlaps (like "orange" in "orange juice")
+            user_words = set(user_mixer_clean.split())
+            recipe_words = set(recipe_ing.split())
+            if user_words.intersection(recipe_words):
                 return True
 
     return False
 
 def parse_volume_to_ounces(measure_text):
+    # If there's no measurement text, return 0
     if not measure_text:
         return 0.0
+
+    # Convert to lowercase and split into words
     text = measure_text.lower()
+
+    # If it's marked as garnish or common garnish terms, it's not a measurable amount
+    garnish_terms = ["garnish", "wedge", "slice", "twist", "wheel", "peel", "sprig", "leaf", "leaves"]
+    if any(term in text for term in garnish_terms):
+        return 0.0
+
     tokens = text.replace("(", " ").replace(")", " ").split()
+
     total = 0.0
+
+    # Go through each word/token
     for tok in tokens:
+        # Handle fractions like "1/2"
         if "/" in tok:
             try:
                 num, den = tok.split("/")
@@ -98,17 +130,58 @@ def parse_volume_to_ounces(measure_text):
                 continue
             except:
                 pass
+
+        # Try to convert to a number
         try:
             total += float(tok)
             continue
         except:
-            pass
+            # Handle concatenated units like "12oz", "50ml"
+            # Extract number from start of string
+            num_str = ""
+            unit_str = ""
+            for i, char in enumerate(tok):
+                if char.isdigit() or char == '.':
+                    num_str += char
+                else:
+                    unit_str = tok[i:]
+                    break
+
+            if num_str:
+                try:
+                    total += float(num_str)
+                    # Check for units in the remaining part
+                    if "ml" in unit_str:
+                        total *= 0.0338
+                    elif "cl" in unit_str:
+                        total *= 0.338
+                    # oz is already in ounces, no conversion needed
+                    continue
+                except:
+                    pass
+
+    # Special handling for ice
+    if "ice" in text or "cube" in text:
+        if total == 0:
+            total = 4.0  # Default ice amount
+        if "cube" in text:
+            if total < 2:
+                total = 3 * 1.5  # Assume 3 cubes if no number given
+            else:
+                total = total * 1.5  # Convert cube count to ounces
+
+    # If we still have 0, return 0
     if total == 0:
         return 0
-    if "ml" in text:
+
+    # Convert different units to ounces (for space-separated cases)
+    if "cup" in text or "cups" in text:
+        return total * 8.0  # 1 cup = 8 fluid ounces
+    if "ml" in text and not any("ml" in tok for tok in tokens if tok != tokens[0]):  # Avoid double conversion
         return total * 0.0338
-    if "cl" in text:
+    if "cl" in text and not any("cl" in tok for tok in tokens if tok != tokens[0]):  # Avoid double conversion
         return total * 0.338
+
     return total
 
 def recommend_cocktails(user_prefs, max_results=5):
@@ -148,74 +221,47 @@ def recommend_cocktails(user_prefs, max_results=5):
                 return results
     return results
 
-def estimate_bac_for_drink(detail, avg_weight_lbs, alcohol_keywords):
-    total_alcohol_oz = 0.0
-    for n in range(1, 16):
-        ing = detail.get(f"strIngredient{n}")
-        measure = detail.get(f"strMeasure{n}")
-        if ing and ing.strip() and any(kw.lower() in ing.lower() for kw in alcohol_keywords):
-            total_alcohol_oz += parse_volume_to_ounces(measure or "")
-    if total_alcohol_oz == 0:
-        return None
-    ethanol_oz = total_alcohol_oz * 0.4
-    standard_drinks = ethanol_oz / 0.6
-    r = 0.7  # for simplicity, assume male; could be 0.73 for male, 0.66 for female
-    bac = standard_drinks * 5.14 / (avg_weight_lbs * r)
-    return bac
+
 
 def generate_unique_color(ingredient_name):
-    """
-    Generate a unique, highly distinct color for an ingredient based on its name.
-    Uses a predefined palette of 15 maximally contrasting colors for optimal visual distinction.
-
-    Args:
-        ingredient_name (str): The name of the ingredient
-
-    Returns:
-        str: Hex color code from a highly distinct palette
-    """
-    # Predefined palette of 15 maximally contrasting colors
-    # These colors were chosen for maximum visual distinction across the color spectrum
     distinct_colors = [
-        "#FF0000",  # Bright Red
-        "#00FF00",  # Bright Green
-        "#0000FF",  # Bright Blue
-        "#FFFF00",  # Bright Yellow
-        "#FF00FF",  # Magenta
-        "#00FFFF",  # Cyan
-        "#FF8000",  # Orange
-        "#8000FF",  # Purple
-        "#FF0080",  # Pink
-        "#80FF00",  # Lime Green
-        "#0080FF",  # Sky Blue
-        "#FF8080",  # Light Red
-        "#80FF80",  # Light Green
-        "#8080FF",  # Light Blue
-        "#FFFF80",  # Light Yellow
+        "#DC143C",
+        "#FF4500",
+        "#32CD32",
+        "#00CED1",
+        "#1E90FF",
+        "#9370DB",
+        "#FF69B4",
+        "#8B4513",
+        "#20B2AA",
+        "#FF6347",
+        "#4682B4",
+        "#CD5C5C",
+        "#40E0D0",
+        "#800080",
+        "#008000",
+        "#FFA500",
+        "#FF0000",
+        "#0000FF",
+        "#FFD700",
+        "#228B22",
+        "#FF00FF",
+        "#00FFFF",
+        "#800000",
+        "#808000",
+        "#008080",
+        "#000080",
+        "#696969",
+        "#8B0000",
+        "#8A2BE2",
+        "#FF1493",
     ]
 
-    # Create a hash from the ingredient name for consistency
     hash_value = hash(ingredient_name.lower().strip())
-
-    # Use the hash to select from our distinct color palette
     color_index = hash_value % len(distinct_colors)
-
     return distinct_colors[color_index]
 
 def search_youtube_tutorial(cocktail_name):
-    """
-    Search for a YouTube tutorial video for the given cocktail.
-
-    Args:
-        cocktail_name (str): The name of the cocktail to search for
-
-    Returns:
-        dict: Dictionary with video_id for embedding, or None if API key not configured
-
-    Note:
-        Requires YOUTUBE_API_KEY environment variable to be set.
-        Returns a specific video ID that can be embedded directly on the page.
-    """
     search_query = f"how to make {cocktail_name} cocktail recipe"
     api_key = os.environ.get("YOUTUBE_API_KEY")
 
@@ -229,14 +275,13 @@ def search_youtube_tutorial(cocktail_name):
         }
 
     try:
-        # Search for videos using YouTube Data API
         search_url = "https://www.googleapis.com/youtube/v3/search"
         params = {
             "part": "snippet",
             "q": search_query,
             "type": "video",
-            "maxResults": 3,  # Get top 3 results
-            "videoDuration": "short",  # Prefer shorter tutorials
+            "maxResults": 3,
+            "videoDuration": "short",
             "relevanceLanguage": "en",
             "key": api_key
         }
@@ -247,7 +292,6 @@ def search_youtube_tutorial(cocktail_name):
             items = data.get("items", [])
 
             if items:
-                # Use the first video
                 video = items[0]
                 video_id = video["id"]["videoId"]
                 video_title = video["snippet"]["title"]
@@ -266,7 +310,6 @@ def search_youtube_tutorial(cocktail_name):
     except Exception as e:
         print(f"Error searching YouTube for {cocktail_name}: {e}")
 
-    # Return None if we couldn't get a video
     return {
         "video_id": None,
         "video_title": None,
@@ -274,94 +317,173 @@ def search_youtube_tutorial(cocktail_name):
         "api_key_missing": False
     }
 
+def is_solid_ingredient(ingredient_name):
+    solid_keywords = [
+        'sugar', 'salt', 'brown sugar', 'powdered sugar', 'caster sugar',
+        'granulated sugar', 'icing sugar', 'confectioners sugar',
+        'superfine sugar', 'demerara sugar', 'muscovado sugar',
+        'syrup', 'honey', 'extract', 'bitters', 'cream', 'milk',
+        'mint', 'fruit', 'cherry',
+        'olive', 'onion', 'celery', 'cucumber', 'ginger', 'pepper',
+        'powder'
+    ]
+
+    ingredient_lower = ingredient_name.lower().strip()
+
+    # Liquids that might contain solid keywords
+    liquid_indicators = ['juice', 'ade', 'soda', 'cola', 'beer', 'wine', 'whiskey', 'vodka', 'rum', 'gin', 'tequila']
+    for indicator in liquid_indicators:
+        if indicator in ingredient_lower:
+            return False
+
+    # Check if ingredient contains solid keywords
+    for keyword in solid_keywords:
+        if keyword in ingredient_lower:
+            return True
+
+    return False
+
+def parse_ice_proportion_from_instructions(instructions):
+    if not instructions:
+        return None
+
+    text = instructions.lower()
+
+    # Common patterns for ice proportions
+    if "half" in text and "ice" in text:
+        return 0.5
+    if "fill" in text and "ice" in text:
+        # Look for "fill with ice" or similar
+        if "half" in text or "1/2" in text:
+            return 0.5
+        # Assume fill means most of the cup
+        return 0.75
+    if "top" in text and "ice" in text:
+        return 0.25
+    if "quarter" in text and "ice" in text:
+        return 0.25
+
+    return None
+
+def infer_missing_amounts(ingredients_data, cocktail_name=""):
+    name_lower = cocktail_name.lower()
+
+    # Collect specified and missing ingredients
+    specified = []
+    missing = []
+
+    for ing, measure in ingredients_data:
+        volume = parse_volume_to_ounces(measure or "")
+        if volume > 0 and not is_solid_ingredient(ing):
+            specified.append((ing, volume))
+        elif not is_solid_ingredient(ing):
+            missing.append(ing)
+
+    if not missing:
+        return specified + [(ing, 0) for ing in missing]  # Keep missing as 0
+
+    total_specified = sum(vol for _, vol in specified)
+
+    # Cocktail-specific conventions
+    if "mimosa" in name_lower:
+        # Mimosas are typically 50/50 orange juice and champagne
+        if len(missing) == 1 and len(specified) == 1:
+            remaining = 16.0 - total_specified
+            if remaining > 0:
+                return specified + [(missing[0], remaining)]
+
+    elif "bloody mary" in name_lower:
+        # Bloody Mary typically has tomato juice as base, vodka, then smaller amounts
+        pass  # Use default even distribution
+
+    # Default: distribute remaining volume evenly among missing ingredients
+    remaining_volume = 16.0 - total_specified
+    if remaining_volume > 0 and missing:
+        per_missing = remaining_volume / len(missing)
+        return specified + [(ing, per_missing) for ing in missing]
+
+    return specified + [(ing, 0) for ing in missing]
+
 def standardize_ingredients_to_cup(detail, cup_size_oz=16.0):
-    """
-    Standardize cocktail ingredients to fit a red solo cup of specified size.
-
-    Args:
-        detail (dict): Cocktail detail from API
-        cup_size_oz (float): Size of the red solo cup in ounces (default 16.0)
-
-    Returns:
-        list: List of tuples (ingredient_name, standardized_ounces, percentage)
-    """
     ingredients_volumes = []
     total_volume = 0.0
 
-    # Parse all ingredients and their volumes
+    cocktail_name = detail.get("strDrink", "").lower()
+
+    # Collect all liquid ingredients with their measures
+    all_ingredients = []
     for n in range(1, 16):
         ing = detail.get(f"strIngredient{n}")
         measure = detail.get(f"strMeasure{n}")
         if ing and ing.strip():
-            volume_oz = parse_volume_to_ounces(measure or "")
-            if volume_oz > 0:
-                ingredients_volumes.append((ing.strip(), volume_oz))
-                total_volume += volume_oz
+            ing_clean = ing.strip()
+            measure_clean = (measure or "").strip()
+
+            # Special handling for known garnish ingredients in specific cocktails
+            is_garnish = False
+            if "3-mile long island iced tea" in cocktail_name and "lemon" in ing_clean.lower():
+                is_garnish = True
+            elif any(term in measure_clean.lower() for term in ["garnish", "wedge", "slice", "twist", "wheel", "peel", "sprig", "leaf", "leaves"]):
+                is_garnish = True
+            # Additional check: if measure is just a small number and ingredient is a common garnish
+            elif measure_clean and measure_clean.replace(".", "").isdigit() and float(measure_clean) <= 2.0 and ing_clean.lower() in ["lemon", "lime", "orange"]:
+                is_garnish = True
+
+            if not is_garnish and not is_solid_ingredient(ing_clean):
+                all_ingredients.append((ing_clean, measure_clean))
+
+    # Infer missing amounts based on cocktail conventions
+    cocktail_name = detail.get("strDrink", "")
+    ingredients_volumes = infer_missing_amounts(all_ingredients, cocktail_name)
+
+    # Calculate total volume
+    total_volume = sum(vol for _, vol in ingredients_volumes)
+
+    # Check for ice proportion in instructions
+    ice_proportion = parse_ice_proportion_from_instructions(detail.get("strInstructions", ""))
+    ice_adjusted = False
+    ice_volume = 0
+
+    if ice_proportion is not None:
+        # Find ice in ingredients
+        for i, (ing, vol_oz) in enumerate(ingredients_volumes):
+            if ing.lower() == "ice":
+                # Adjust ice volume based on instructions
+                ice_volume = ice_proportion * cup_size_oz
+                ingredients_volumes[i] = (ing, ice_volume)
+                total_volume = total_volume - (vol_oz or 0) + ice_volume
+                ice_adjusted = True
+                break
 
     # If no volumes found, return empty list
     if total_volume == 0:
         return []
 
-    # Scale to fit the cup size
-    scale_factor = cup_size_oz / total_volume
+    # Handle scaling based on whether ice was adjusted
+    if ice_adjusted:
+        # Scale non-ice ingredients to fit remaining space
+        remaining_space = cup_size_oz - ice_volume
+        non_ice_volumes = [(ing, vol_oz) for ing, vol_oz in ingredients_volumes if ing.lower() != "ice"]
+        if non_ice_volumes:
+            non_ice_total = sum(vol_oz for _, vol_oz in non_ice_volumes)
+            if non_ice_total > 0:
+                scale_factor = remaining_space / non_ice_total
+                ingredients_volumes = [(ing, vol_oz * scale_factor) if ing.lower() != "ice" else (ing, vol_oz) for ing, vol_oz in ingredients_volumes]
+    else:
+        # Normal scaling to fit entire cup
+        if total_volume > 0:
+            scale_factor = cup_size_oz / total_volume
+            ingredients_volumes = [(ing, vol_oz * scale_factor) for ing, vol_oz in ingredients_volumes]
 
     standardized = []
     cumulative_pct = 0.0
     for ing, vol_oz in ingredients_volumes:
-        standardized_vol = vol_oz * scale_factor
-        percentage = (standardized_vol / cup_size_oz) * 100
-        standardized.append((ing, standardized_vol, percentage))
+        percentage = (vol_oz / cup_size_oz) * 100
+        standardized.append((ing, vol_oz, percentage))
         cumulative_pct += percentage
 
-    # Adjust last ingredient to ensure total is exactly 100%
+    # Ensure total is exactly 100%
     if standardized:
         standardized[-1] = (standardized[-1][0], standardized[-1][1], 100.0 - (cumulative_pct - percentage))
 
     return standardized
-
-def display_red_solo_cup_visualization(standardized_ingredients, cup_size_oz=16.0):
-    """
-    Display a simple ASCII visualization of the red solo cup with ingredient bars.
-
-    Args:
-        standardized_ingredients (list): List from standardize_ingredients_to_cup
-        cup_size_oz (float): Size of the red solo cup in ounces
-    """
-    print("\nRed Solo Cup Visualization (16 oz):")
-    print("   _________ ")
-    print("  /         \\")
-    print(" /           \\")
-
-    # Cup has 10 lines of content
-    cup_lines = 10
-    current_level = 0.0
-    ingredient_bars = []
-
-    for i, (ing, vol_oz, pct) in enumerate(standardized_ingredients):
-        # Calculate how many lines this ingredient takes
-        lines_for_ing = int((pct / 100.0) * cup_lines)
-        if lines_for_ing < 1 and pct > 0:
-            lines_for_ing = 1  # At least one line for any ingredient
-
-        for line in range(lines_for_ing):
-            if current_level < cup_lines:
-                print(" |###########|")
-                current_level += 1
-
-        # Collect the ingredient bar
-        bar_length = int(pct / 10)  # Scale to 10 characters
-        bar = "#" * bar_length + " " * (10 - bar_length)
-        ingredient_bars.append(f"     [{bar}] {ing} ({vol_oz:.1f} oz, {pct:.1f}%)")
-
-    # Fill remaining cup with empty space
-    while current_level < cup_lines:
-        print(" |           |")
-        current_level += 1
-
-    print(" \\___________/")
-    print(f"Total volume: {cup_size_oz:.1f} oz")
-
-    # Print all ingredient bars
-    print("\nIngredient Breakdown:")
-    for bar in ingredient_bars:
-        print(bar)
