@@ -7,7 +7,92 @@ import os
 # Add the parent directory to the Python path so we can import app modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol, search_youtube_tutorial
+from app.cocktails import recommend_cocktails, fetch_drink_details, fetch_ingredient_list, fetch_drinks_by_alcohol, search_youtube_tutorial, standardize_ingredients_to_cup, generate_unique_color
+
+def is_solid_ingredient(ingredient_name):
+    """Determine if an ingredient is typically solid/powder vs liquid."""
+    solid_keywords = [
+        'sugar', 'salt', 'brown sugar', 'powdered sugar', 'caster sugar',
+        'granulated sugar', 'icing sugar', 'confectioners sugar',
+        'superfine sugar', 'demerara sugar', 'muscovado sugar',
+        'syrup', 'honey', 'extract', 'bitters', 'cream', 'milk',
+        'mint', 'fruit', 'lemon', 'lime', 'cherry',
+        'olive', 'onion', 'celery', 'cucumber', 'ginger', 'pepper',
+        'powder'
+    ]
+
+    ingredient_lower = ingredient_name.lower().strip()
+
+    # Check if ingredient contains solid keywords
+    for keyword in solid_keywords:
+        if keyword in ingredient_lower:
+            return True
+
+    return False
+
+def format_measurement(ingredient_name, vol_oz, original_measure=None, context="visualization"):
+    """Format measurements based on context.
+
+    Args:
+        context: "visualization" for cup lines, "breakdown" for ingredient list
+    """
+    if context == "breakdown":
+        # For breakdown: solids show original units, liquids show ounces
+        if is_solid_ingredient(ingredient_name):
+            if original_measure and original_measure.strip():
+                return original_measure.strip()
+            else:
+                # Fallback to ounces if no original measure
+                return f"{vol_oz:.1f} oz"
+        else:
+            # Liquid ingredients show ounces in breakdown
+            return f"{vol_oz:.1f} oz"
+    else:
+        # For visualization lines: liquids show cup fractions, solids show original
+        if is_solid_ingredient(ingredient_name):
+            if original_measure and original_measure.strip():
+                return original_measure.strip()
+            else:
+                # Fallback to ounces if no original measure
+                return f"{vol_oz:.1f} oz"
+        else:
+            # For liquid ingredients, convert to cup fraction format
+            fraction = vol_oz / 16.0
+            if abs(fraction - 1/2) < 0.01:
+                return "1/2 of a cup"
+            elif abs(fraction - 1/3) < 0.01:
+                return "1/3 of a cup"
+            elif abs(fraction - 1/4) < 0.01:
+                return "1/4 of a cup"
+            elif abs(fraction - 1/5) < 0.01:
+                return "1/5 of a cup"
+            elif abs(fraction - 1/6) < 0.01:
+                return "1/6 of a cup"
+            elif abs(fraction - 1/8) < 0.01:
+                return "1/8 of a cup"
+            elif abs(fraction - 1/10) < 0.01:
+                return "1/10 of a cup"
+            elif abs(fraction - 1/12) < 0.01:
+                return "1/12 of a cup"
+            elif abs(fraction - 1/16) < 0.01:
+                return "1/16 of a cup"
+            else:
+                return f"{fraction:.2f} of a cup"
+
+def get_percentage_display(ingredient_name, pct):
+    """Get percentage display for ingredient breakdown.
+
+    Args:
+        ingredient_name: Name of the ingredient
+        pct: Percentage value
+
+    Returns:
+        "0%" for solid ingredients, formatted percentage for liquids
+    """
+    if is_solid_ingredient(ingredient_name):
+        return "0%"
+    else:
+        return f"{pct:.1f}%"
 
 home_routes = Blueprint("home_routes", __name__)
 
@@ -100,7 +185,26 @@ def cocktail_detail(drink_id):
     # Fetch YouTube tutorial video
     youtube_video = search_youtube_tutorial(detail["strDrink"])
 
-    return render_template("cocktail_detail.html", cocktail=cocktail, youtube_video=youtube_video)
+    # Standardize ingredients for 16 oz red solo cup
+    standardized_ingredients = standardize_ingredients_to_cup(detail, cup_size_oz=16.0)
+
+    # Generate unique colors for each ingredient
+    ingredient_colors = {}
+    for ing, _, _ in standardized_ingredients:
+        ingredient_colors[ing] = generate_unique_color(ing)
+
+    # Create ingredient_measures mapping
+    ingredient_measures = {}
+    for ing, _, _ in standardized_ingredients:
+        # Find the original measurement for this ingredient
+        for n in range(1, 16):
+            orig_ing = detail.get(f"strIngredient{n}")
+            orig_measure = detail.get(f"strMeasure{n}")
+            if orig_ing and orig_ing.strip() == ing:
+                ingredient_measures[ing] = orig_measure or ""
+                break
+
+    return render_template("cocktail_detail.html", cocktail=cocktail, youtube_video=youtube_video, standardized_ingredients=standardized_ingredients, ingredient_colors=ingredient_colors, ingredient_measures=ingredient_measures, format_measurement=format_measurement, get_percentage_display=get_percentage_display)
 
 @home_routes.route("/compatible_mixers")
 def compatible_mixers():

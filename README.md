@@ -60,6 +60,7 @@ The web app requires a Flask secret key for session management. Create a local "
 
 FLASK_APP=web_app
 SECRET_KEY=super-secret-flask-key-fall-2025-for-cocktail-app
+YOUTUBE_API_KEY=your-youtube-api-key-here
 ```
 
 
