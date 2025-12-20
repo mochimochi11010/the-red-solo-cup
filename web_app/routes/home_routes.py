@@ -116,7 +116,7 @@ def recommendations():
         "mixers": mixers_list
     }
 
-    recs = recommend_cocktails(user_prefs, max_results=10)
+    recs = recommend_cocktails(user_prefs)
 
     if not recs:
         flash("No cocktails found for those ingredients. Try different combinations.", "warning")

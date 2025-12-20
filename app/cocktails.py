@@ -56,7 +56,7 @@ def fetch_ingredient_list():
         print(f"Error fetching ingredient list: {e}")
         return []
 
-def drink_matches_mixers(drink, mixers):
+def get_mixer_match_score(drink, mixers):
     # Get all ingredients from the drink recipe
     ingredients = []
     for n in range(1, 16):
@@ -64,9 +64,9 @@ def drink_matches_mixers(drink, mixers):
         if ing and ing.strip():
             ingredients.append(ing.strip().lower())
 
-    # If no mixers specified, any drink matches
+    # If no mixers specified, any drink matches with score 0
     if not mixers:
-        return True
+        return 0
 
     # Common ingredient aliases for better matching
     aliases = {
@@ -81,27 +81,39 @@ def drink_matches_mixers(drink, mixers):
         "tonic": ["tonic water", "tonic"],
     }
 
-    # Check if any user mixer matches any recipe ingredient
-    for recipe_ing in ingredients:
-        for user_mixer in mixers:
-            user_mixer_clean = user_mixer.lower().strip()
+    match_count = 0
+    matched_mixers = set()
 
+    # Check each user mixer against all recipe ingredients
+    for user_mixer in mixers:
+        user_mixer_clean = user_mixer.lower().strip()
+
+        for recipe_ing in ingredients:
             # Check aliases first
             if (user_mixer_clean in aliases.get(recipe_ing, []) or
                 recipe_ing in aliases.get(user_mixer_clean, [])):
-                return True
+                matched_mixers.add(user_mixer)
+                break
 
             # Check if one contains the other
             if user_mixer_clean in recipe_ing or recipe_ing in user_mixer_clean:
-                return True
+                matched_mixers.add(user_mixer)
+                break
 
             # Check for word overlaps (like "orange" in "orange juice")
             user_words = set(user_mixer_clean.split())
             recipe_words = set(recipe_ing.split())
             if user_words.intersection(recipe_words):
-                return True
+                matched_mixers.add(user_mixer)
+                break
 
-    return False
+    return len(matched_mixers)
+
+def drink_matches_mixers(drink, mixers):
+    # Keep backward compatibility: if no mixers specified, any drink matches
+    if not mixers:
+        return True
+    return get_mixer_match_score(drink, mixers) > 0
 
 def parse_volume_to_ounces(measure_text):
     # If there's no measurement text, return 0
@@ -184,13 +196,15 @@ def parse_volume_to_ounces(measure_text):
 
     return total
 
-def recommend_cocktails(user_prefs, max_results=5):
+def recommend_cocktails(user_prefs, max_results=50):
     alcohols = user_prefs["alcohol_types"]
     mixers = user_prefs["mixers"]
     seen = set()
     results = []
     for alc in alcohols:
-        for d in fetch_drinks_by_alcohol(alc):
+        # Limit drinks per alcohol to avoid too many API calls
+        drinks = fetch_drinks_by_alcohol(alc)[:20]  # Limit to 20 per alcohol
+        for d in drinks:
             # Ensure d is a dict with idDrink
             if not isinstance(d, dict) or "idDrink" not in d:
                 continue
@@ -200,8 +214,10 @@ def recommend_cocktails(user_prefs, max_results=5):
             detail = fetch_drink_details(drink_id)
             if not detail:
                 continue
-            if not drink_matches_mixers(detail, mixers):
-                continue
+            # Calculate match score
+            score = get_mixer_match_score(detail, mixers)
+            if score == 0 and mixers:
+                continue  # Skip if no matches and user specified mixers
             ingredients = []
             for n in range(1, 16):
                 ing = detail.get(f"strIngredient{n}")
@@ -214,12 +230,13 @@ def recommend_cocktails(user_prefs, max_results=5):
                 "ingredients": ingredients,
                 "instructions": detail.get("strInstructions", "").strip(),
                 "thumb": detail.get("strDrinkThumb"),
-                "detail": detail
+                "detail": detail,
+                "match_score": score
             })
             seen.add(drink_id)
-            if len(results) >= max_results:
-                return results
-    return results
+    # Sort by match_score descending, then by name ascending
+    results.sort(key=lambda x: (-x["match_score"], x["name"]))
+    return results[:max_results]
 
 
 
